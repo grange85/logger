@@ -1,0 +1,146 @@
+/**************************************************  $VER: CLogger v1.0 (19/04/95)
+* Andy's newest Arexx project.                    *
+* This latest project reads from a configuration  *
+* file which lists all your log files and trims   *
+* them to a specified length.                     *
+* This is a variation on my Logger script, that   *
+* does the trimming usin Arexx, as opposed to an  *
+* external command, 'Tail', that the Logger script*
+* used. Obviously because of this it is a fair bit*
+* bit slower than Logger, but this is all my own  *
+* work.                                           *
+* Well almost, it does require the incredible     *
+* RexxReqTools by Rafael D'Halleweyn.             *
+**************************************************/
+
+
+/* variables you may change                      */
+configfile = 's:logger.config'
+tempfile = 't:logger.temp'
+lf         = '0a'x
+
+
+
+
+/* check for rexxreqtools                        */
+if exists('LIBS:rexxreqtools.library') then do
+    call addlib('rexxreqtools.library',0,-30)
+end
+
+parse arg arguments
+if compress(arguments) ~= '' then do
+    if find(Upper(arguments),'LOGRESET') > 0 then signal logreset
+    if find(Upper(arguments),'CONFIG') > 0 then conf = 1
+    if find(Upper(arguments),'FORCE') > 0 then force = 1
+    if conf ~= 1&force ~= 1 then signal usage
+end
+
+/* first get the config file                     */
+
+if ~exists(configfile)|conf = 1 then do
+        call rtezrequest('    Are you sure you would'lf'like to create a new config file?','_Yes |_No','CLogger v1.0','rt_reqpos = reqpos_centerscr')
+        frt = rtresult
+        if frt = 0&conf = 1 then do
+            call rtezrequest('Do you wish to use the old config?','_Yes|_No','CLogger v1.0','rt_reqpos=reqpos_centerscr')
+            srt = rtresult
+            if srt = 0 then Exit
+            if srt = 1 then signal main
+        end
+        if frt = 0&conf ~= 1 then Exit
+    call loggerconfig
+end
+
+
+
+
+main:
+/* read the config file and 'tail' each log      */
+
+call open(InpFile,configfile,R)
+
+do forever
+    line = readln(InpFile)
+    if EOF(InpFile) then break
+    if left(line,1) ~= "#" then do
+        if compress(line) ~= ""  then do
+            taillen = subword(line,2,1)
+            tailfile = subword(line,1,1)
+            if exists(tailfile) then do
+                if force ~= 1 then do
+                    call rtezrequest(' Are you sure you wish to trim'lf tailfile lf' to last 'taillen,'_Yes | _No','CLogger v1.0','rt_reqpos=reqpos_centerscr')
+                    frt = rtresult
+                    end
+                if frt ~= 0|force = 1 then do
+                    call open(Tailer,tailfile,R)
+                    counter = 0
+                    do forever
+                        call readln(Tailer)
+                        if EOF(Tailer) then break
+                        counter = counter + 1
+                    end
+                    call close(tailer)
+                    call open(tailer,tailfile,R)
+                    call open(finfile,tempfile,W)
+                    if taillen >= counter then break
+                    clip = counter - taillen
+                    ncon = 0
+                    do forever
+                        line = readln(tailer)
+                        if EOF(tailer) then break
+                        if ncon >= clip then do
+                            writeln(finfile,line)
+                        end
+                        ncon = ncon + 1
+                    end
+                    call close(tailer)
+                    call close(finfile)
+                    address command 'delete >NIL: 'tailfile'.bak'
+                    address command 'rename 'tailfile tailfile'.bak'
+                    address command 'copy t:logger.temp 'tailfile' QUIET'
+                    address command 'delete >NIL: t:logger.temp'
+                end
+            end
+        end
+    end
+end
+
+call close(InpFile)
+
+exit
+usage:
+
+say 'Logger [CONFIG] [FORCE] [LOGRESET]'
+exit
+
+
+loggerconfig:
+call open(Outfile,configfile,W)
+call writeln(OutFile,'# Config file created by Logger v1.0')
+do forever
+    logstring = rtfilerequest('work:',,'Logger.config',,'rtfi_matchpat=#?.log rtfi_flags=freqf_patgad rt_reqpos=reqpos_centerscr')
+    frt = rtresult
+    if frt = 0 then break
+    logno = rtgetlong('200','trim 'logstring' to how many?','Logger.config',,'rtgl_min=0 rt_reqpos=reqpos_centerscr')
+    frt = rtresult
+    if frt = 0 then break
+    call writeln(Outfile,logstring' 'logno)
+end
+call close(outfile)
+return
+
+
+/*logresetter*/
+logreset:
+rtezrequest('Are you sure you wish to reset your logs?'lf'This will replace all the logfiles in your config'lf'with their backups!','_Yes|_No','Logger v1.0','rt_reqpos=reqpos_centerscr rtez_defaultresponse=0')
+open(inpfile,configfile,R)
+do forever
+    line = readln(inpfile)
+    if EOF(InpFile) then break
+    rfile = subword(line,1,1)
+    if exists(rfile'.bak') then do
+        address command 'delete >NIL: 'rfile
+        address command 'rename 'rfile'.bak' rfile
+    end
+end
+exit
+

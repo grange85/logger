@@ -1,0 +1,10 @@
+Short: Arexx log management script
+Upload: andy@aald.demon.co.uk
+Author: andy@aald.demon.co.uk
+Type: util/rexx
+
+Two Arexx scripts for keeping those ever expanding logfiles in 
+check, both basically do the same thing, one however requires the 
+external command 'Tail' to trim the logfiles, the other does it 
+from completely within Arexx.
+
